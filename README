@@ -1,1 +1,19 @@
-Just test...
+		README for fcplay
+		=================
+	        vkoul@kernel.org
+	        ================
+
+1. WHAT
+	fcplay is a userspace utility for anyone who wants to use the
+ALSA compressed interface to play/record compressed content
+
+2. WHERE
+	The library can found in alsa-project.org
+Git: git clone git://github.com:vinodkoul/fcplay.git
+
+3. PATCHES
+	Please send any enhancements/fixes to alsa developer mailing list at:
+alsa-devel@alsa-project.org. 
+
+4. LICENSE
+	fcplay is provided under a LGPLv2.1 license.
