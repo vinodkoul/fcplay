@@ -38,6 +38,7 @@ static const struct {
 	{ "REAL", SND_AUDIOCODEC_REAL },
 	{ "VORBIS", SND_AUDIOCODEC_VORBIS },
 	{ "FLAC", SND_AUDIOCODEC_FLAC },
+	{ "WMA", SND_AUDIOCODEC_WMA },
 	{ "IEC61937", SND_AUDIOCODEC_IEC61937 },
 	{ "G723_1", SND_AUDIOCODEC_G723_1 },
 	{ "G729", SND_AUDIOCODEC_G729 },
@@ -165,13 +166,14 @@ static int get_codec_id(int codec_id)
 		return SND_AUDIOCODEC_MP3;
 	case AV_CODEC_ID_AAC:
 		return SND_AUDIOCODEC_AAC;
-	case AV_CODEC_ID_WMAV1:
-	case AV_CODEC_ID_WMAV2:
-		return SND_AUDIOCODEC_WMA;
 	case AV_CODEC_ID_VORBIS:
 		return SND_AUDIOCODEC_VORBIS;
 	case AV_CODEC_ID_FLAC:
 		return SND_AUDIOCODEC_FLAC;
+	case AV_CODEC_ID_WMAV2:
+	case AV_CODEC_ID_WMAPRO:
+	case AV_CODEC_ID_WMALOSSLESS:
+		return SND_AUDIOCODEC_WMA;
 	case AV_CODEC_ID_RA_144:
 	case AV_CODEC_ID_RA_288:
 		return SND_AUDIOCODEC_REAL;
@@ -190,9 +192,12 @@ static int get_codec_id(int codec_id)
 static int parse_file(char *file, struct snd_codec *codec)
 {
 	AVFormatContext *ctx = NULL;
+	AVCodecContext *enc = NULL;
 	AVStream *stream;
 	char errbuf[50];
 	int err = 0, i, filled = 0;
+	int bit_rate;
+	int bits_per_sample;
 
 	err = avformat_open_input(&ctx, file, NULL, NULL);
 	if (err < 0) {
@@ -216,11 +221,23 @@ static int parse_file(char *file, struct snd_codec *codec)
 	if (verbose)
 		fprintf(stderr, "Streams: %d\n", ctx->nb_streams);
 
+	enc = avcodec_alloc_context3(NULL);
+	if (!enc) {
+		fprintf(stderr, "Failed to alloc codec context\n");
+		return -ENOMEM;
+	}
+
 	for (i = 0; i < ctx->nb_streams; i++) {
 		stream =  ctx->streams[i];
 
 		if (verbose)
 			fprintf(stderr, "StreamType: %d", stream->codecpar->codec_type);
+
+		err = avcodec_parameters_to_context(enc, stream->codecpar);
+		if (err) {
+			fprintf(stderr, "avcodec_parameters_to_context failed\n");
+			goto exit;
+		}
 
 		if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			fprintf(stderr, "Stream:%d is audio type\n", i);
@@ -231,10 +248,13 @@ static int parse_file(char *file, struct snd_codec *codec)
 				codec->ch_in = stream->codecpar->channels;
 				codec->ch_out = stream->codecpar->channels;
 				codec->sample_rate = stream->codecpar->sample_rate;
-				codec->bit_rate = ctx->bit_rate;
+				bits_per_sample = av_get_bits_per_sample(enc->codec_id);
+				bit_rate = bits_per_sample ?
+					enc->sample_rate * enc->channels * bits_per_sample : enc->bit_rate;
+				codec->bit_rate = bit_rate;
 				codec->profile = stream->codecpar->profile;
 				codec->format = 0; /* need codec format type */
-				codec->align = stream->codecpar->block_align;
+				codec->align = enc->block_align;
 				codec->level = 0;
 				codec->rate_control = 0;
 				codec->ch_mode = 0;
@@ -250,6 +270,26 @@ static int parse_file(char *file, struct snd_codec *codec)
 					codec->options.flac_d.max_blk_size = 65535;
 					codec->options.flac_d.min_frame_size = 11;
 					codec->options.flac_d.max_frame_size = 8192*4;
+				}
+
+				if (codec->id == SND_AUDIOCODEC_WMA) {
+					switch (enc->codec_tag) {
+					case 0x161:
+						codec->profile = SND_AUDIOPROFILE_WMA9;
+						break;
+					case 0x162:
+						codec->profile = SND_AUDIOPROFILE_WMA9_PRO;
+						break;
+					case 0x163:
+						codec->profile = SND_AUDIOPROFILE_WMA9_LOSSLESS;
+						break;
+					case 0x166:
+						codec->profile = SND_AUDIOPROFILE_WMA10;
+						break;
+					case 0x167:
+						codec->profile = SND_AUDIOPROFILE_WMA10_LOSSLESS;
+						break;
+					}
 				}
 			}
 
@@ -271,6 +311,9 @@ static int parse_file(char *file, struct snd_codec *codec)
 					fprintf(stderr, "  Min Frame Size  %d",  codec->options.flac_d.min_frame_size);
 					fprintf(stderr, "  Max Frame Size  %d",  codec->options.flac_d.max_frame_size);
 
+				}
+				if (codec->id == SND_AUDIOCODEC_WMA) {
+					fprintf(stderr, "  Profile: %x", codec->profile);
 				}
 				fprintf(stderr, "\n");
 			}
