@@ -17,3 +17,8 @@ alsa-devel@alsa-project.org.
 
 4. LICENSE
 	fcplay is provided under a LGPLv2.1 license.
+
+5. Dependecies
+	fcplay depends on libtool so these packages are required: autotools autoconf pkg-config libtool
+	fcplay uses libavcodec so these packages are required: libavcodec-dev libavformat-dev
+	fcplay needs tinycompress so that should also be installed
